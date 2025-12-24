@@ -1,0 +1,116 @@
+blueprint:
+  name: Randomized Offset Device Control
+  description: >
+    Turn devices (lights or switches) on/off around sunrise, sunset, or fixed time with random ± offset for a lived-in look.
+    
+    - Sunrise/Sunset: Automatic true ± variation.
+    - Fixed time: Set "Early trigger time" to base time MINUS max offset (e.g., 20:00 ±30 min → set 19:30).
+    
+    Create separate automations for on and off.
+  domain: automation
+  input:
+    trigger_type:
+      name: Trigger Type
+      selector:
+        select:
+          options:
+            - sunrise
+            - sunset
+            - fixed
+      default: sunset
+    max_offset_minutes:
+      name: Max Random Offset (± minutes)
+      description: e.g., 30 for ~±30 min variation
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 240
+          unit_of_measurement: minutes
+    fixed_trigger_time:
+      name: Early Trigger Time (Fixed only)
+      description: Base time minus max offset
+      selector:
+        time:
+    action:
+      name: Action
+      selector:
+        select:
+          options:
+            - turn_on
+            - turn_off
+      default: turn_on
+    entities:
+      name: Devices to Control
+      selector:
+        target:
+          entity:
+            domain:
+              - light
+              - switch
+    brightness_pct:
+      name: Brightness % (Turn On only, optional)
+      description: 1-100; 0 = no change
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+    transition:
+      name: Transition Seconds (Turn On only, optional)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+
+trigger:
+  - platform: sun
+    event: sunrise
+    offset: !input max_offset_minutes * -60  # Early trigger for sunrise
+    id: sunrise
+  - platform: sun
+    event: sunset
+    offset: !input max_offset_minutes * -60  # Early trigger for sunset
+    id: sunset
+  - platform: time
+    at: !input fixed_trigger_time
+    id: fixed
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: sunrise
+                  - condition: template
+                    value_template: "{{ 'sunrise' in !input trigger_type }}"
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: sunset
+                  - condition: template
+                    value_template: "{{ 'sunset' in !input trigger_type }}"
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: fixed
+                  - condition: template
+                    value_template: "{{ 'fixed' in !input trigger_type }}"
+        sequence:
+          - delay:
+              seconds: "{{ range(0, (2 * !input max_offset_minutes * 60) + 1) | random }}"
+          - service: "{{ 'switch' if 'switch' in states(!input entities.entity_id) else 'light' }}.{{ !input action }}"
+            target: !input entities
+            data:
+              {% if !input action == 'turn_on' %}
+              {% if !input brightness_pct > 0 %}brightness_pct: {{ !input brightness_pct }}{% endif %}
+              {% if !input transition > 0 %}transition: {{ !input transition }}{% endif %}
+              {% endif %}
+    default: []
+mode: single
