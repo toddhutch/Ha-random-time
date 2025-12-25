@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v1.3
+  name: Randomized Offset Control v1.4
   description: >
-    v1.3 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed template validation issues.
+    v1.4 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fully fixed validation errors.
     
     • Sunrise/Sunset: true ± variation
     • Fixed time: set early trigger = base time minus max offset (e.g., want 18:30 ±30 → set 18:00)
@@ -11,7 +11,6 @@ blueprint:
   input:
     trigger_type:
       name: Trigger Type
-      description: Base event for the random offset
       default: sunset
       selector:
         select:
@@ -21,7 +20,6 @@ blueprint:
             - fixed
     max_offset_minutes:
       name: Max Random Offset (± minutes)
-      description: e.g., 30 for approximately ±30 min variation
       default: 30
       selector:
         number:
@@ -30,12 +28,10 @@ blueprint:
           unit_of_measurement: minutes
     fixed_trigger_time:
       name: Early Trigger Time (only for Fixed)
-      description: Desired time minus max offset
       selector:
         time:
     action:
       name: Action
-      description: What to do after the random delay
       default: turn_on
       selector:
         select:
@@ -44,7 +40,6 @@ blueprint:
             - turn_off
     entities:
       name: Entities / Scenes to Control
-      description: Lights, switches, or scenes
       selector:
         target:
           entity:
@@ -54,7 +49,6 @@ blueprint:
               - scene
     brightness_pct:
       name: Brightness % (lights only, turn_on)
-      description: Leave 0 for no change
       default: 0
       selector:
         number:
@@ -62,7 +56,6 @@ blueprint:
           max: 100
     transition:
       name: Transition seconds (lights only, turn_on)
-      description: Leave 0 for no transition
       default: 0
       selector:
         number:
@@ -108,24 +101,24 @@ action:
         sequence:
           - delay:
               seconds: "{{ range(0, (2 * !input max_offset_minutes * 60) + 1) | random }}"
-          # Scene turn_on only
+          # Scene turn_on
           - choose:
-              - conditions: "{{ !input action == 'turn_on' and 'scene' in (!input entities.entity_id | map(attribute='domain') | list) }}"
+              - conditions: "{{ !input action == 'turn_on' and 'scene' in (!input entities.entity_id | map(attribute='domain') | unique | list) }}"
                 sequence:
                   - service: scene.turn_on
                     target: !input entities
-          # Light/switch turn_on – full with params if needed
+          # Light/switch turn_on with brightness and/or transition
           - choose:
-              - conditions: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | list) and ( !input brightness_pct > 0 or !input transition > 0 ) }}"
+              - conditions: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | unique | list) and ( !input brightness_pct > 0 or !input transition > 0 ) }}"
                 sequence:
                   - service: light.turn_on
                     target: !input entities
                     data:
                       brightness_pct: !input brightness_pct
                       transition: !input transition
-          # Light/switch turn_on – basic (no params)
+          # Light/switch turn_on basic (no optional params)
           - choose:
-              - conditions: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | list) and !input brightness_pct == 0 and !input transition == 0 }}"
+              - conditions: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | unique | list) and !input brightness_pct == 0 and !input transition == 0 }}"
                 sequence:
                   - service: light.turn_on
                     target: !input entities
