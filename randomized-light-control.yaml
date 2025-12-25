@@ -1,10 +1,10 @@
 blueprint:
-  name: Randomized Offset Control v5.0
+  name: Randomized Offset Control v6.0
   description: >
-    v5.0 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed delay validation.
+    v6.0 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed delay validation with loop.
     
-    • Sunrise/Sunset: true ± variation (early offset + looped random delay)
-    • Fixed time: early trigger + looped random delay
+    • Sunrise/Sunset: true ± variation (early offset + random delay via loop)
+    • Fixed time: early trigger + random delay via loop
     • turn_on: scenes → scene.turn_on | lights/switches → light.turn_on (optional brightness/transition)
     • turn_off: lights/switches only
   domain: automation
@@ -100,20 +100,18 @@ action:
                     value_template: "{{ !input trigger_type == 'fixed' }}"
         sequence:
           - variables:
-              full_minutes: "{{ !input max_offset_minutes }}"
-              extra_minutes: "{{ !input max_offset_minutes }}"
-              random_loops: "{{ range(0, full_minutes + 1) | random }}"
-              random_seconds: "{{ range(0, 61) | random }}"
+              random_full_minutes: "{{ range(0, !input max_offset_minutes + 1) | random }}"
+              random_extra_seconds: "{{ range(0, 60) | random }}"
               entity_list: "{{ [entities.entity_id] if entities.entity_id is string else entities.entity_id }}"
               has_scene: "{{ entity_list | select('match', '^scene\\.') | list | count > 0 }}"
               has_params: "{{ !input brightness_pct > 0 or !input transition > 0 }}"
           - repeat:
-              count: "{{ random_loops }}"
+              count: "{{ random_full_minutes }}"
               sequence:
                 - delay:
                     minutes: 1
           - delay:
-              seconds: "{{ random_seconds }}"
+              seconds: "{{ random_extra_seconds }}"
           - if:
               - condition: template
                 value_template: "{{ !input action == 'turn_on' and has_scene }}"
