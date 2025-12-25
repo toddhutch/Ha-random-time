@@ -1,9 +1,9 @@
 blueprint:
-  name: Randomized Offset Control v2.0
+  name: Randomized Offset Control v2.2
   description: >
-    v2.0 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. All validation fixed.
+    v2.2 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Offset as seconds for validation.
     
-    • Sunrise/Sunset: true ± variation (early trigger + random delay)
+    • Sunrise/Sunset: true ± variation (early offset in seconds + random delay)
     • Fixed time: set early trigger = base time minus max offset
     • turn_on: scenes → scene.turn_on | lights/switches → light.turn_on (optional brightness/transition)
     • turn_off: lights/switches only
@@ -65,11 +65,11 @@ blueprint:
 trigger:
   - platform: sun
     event: sunrise
-    offset: "-00:{{ '%02d' % max_offset_minutes }}:00"
+    offset: "{{ (max_offset_minutes | int(0) * -60) }}"
     id: sunrise
   - platform: sun
     event: sunset
-    offset: "-00:{{ '%02d' % max_offset_minutes }}:00"
+    offset: "{{ (max_offset_minutes | int(0) * -60) }}"
     id: sunset
   - platform: time
     at: !input fixed_trigger_time
@@ -79,7 +79,7 @@ action:
   - variables:
       is_turn_on: "{{ action == 'turn_on' }}"
       is_turn_off: "{{ action == 'turn_off' }}"
-      entity_list: "{{ entities.entity_id if entities.entity_id is iterable and entities.entity_id is not string else [entities.entity_id] if entities.entity_id else [] }}"
+      entity_list: "{{ [entities.entity_id] if entities.entity_id is string else entities.entity_id if entities.entity_id is iterable else [] }}"
       has_scene: "{{ entity_list | select('match', '^scene\\.') | list | count > 0 }}"
       has_params: "{{ brightness_pct > 0 or transition > 0 }}"
   - choose:
