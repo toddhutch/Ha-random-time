@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v1.5
+  name: Randomized Offset Control v1.6
   description: >
-    v1.5 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Simplified templates for validation.
+    v1.6 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed template syntax for validation.
     
     • Sunrise/Sunset: true ± variation
     • Fixed time: set early trigger = base time minus max offset (e.g., want 18:30 ±30 → set 18:00)
@@ -65,21 +65,22 @@ blueprint:
 trigger:
   - platform: sun
     event: sunrise
-    offset: "-{{ !input max_offset_minutes }}:00"
+    offset: "-{{ max_offset_minutes }}:00"
     id: sunrise
   - platform: sun
     event: sunset
-    offset: "-{{ !input max_offset_minutes }}:00"
+    offset: "-{{ max_offset_minutes }}:00"
     id: sunset
   - platform: time
-    at: !input fixed_trigger_time
+    at: fixed_trigger_time
     id: fixed
 
 action:
   - variables:
-      is_turn_on: "{{ !input action == 'turn_on' }}"
-      has_scene: "{{ 'scene' in (!input entities.entity_id | map('attribute', 'domain') | unique | list) }}"
-      has_params: "{{ !input brightness_pct > 0 or !input transition > 0 }}"
+      is_turn_on: "{{ action == 'turn_on' }}"
+      is_turn_off: "{{ action == 'turn_off' }}"
+      has_scene: "{{ entities.entity_id | select('match', '^scene\\.') | list | count > 0 }}"
+      has_params: "{{ brightness_pct > 0 or transition > 0 }}"
   - choose:
       - conditions:
           - condition: or
@@ -89,41 +90,41 @@ action:
                   - condition: trigger
                     id: sunrise
                   - condition: template
-                    value_template: "{{ !input trigger_type == 'sunrise' }}"
+                    value_template: "{{ trigger_type == 'sunrise' }}"
               - condition: and
                 conditions:
                   - condition: trigger
                     id: sunset
                   - condition: template
-                    value_template: "{{ !input trigger_type == 'sunset' }}"
+                    value_template: "{{ trigger_type == 'sunset' }}"
               - condition: and
                 conditions:
                   - condition: trigger
                     id: fixed
                   - condition: template
-                    value_template: "{{ !input trigger_type == 'fixed' }}"
+                    value_template: "{{ trigger_type == 'fixed' }}"
         sequence:
           - delay:
-              seconds: "{{ range(0, (2 * !input max_offset_minutes * 60) + 1) | random }}"
+              seconds: "{{ range(0, (2 * max_offset_minutes * 60) + 1) | random }}"
           - choose:
               - conditions: "{{ is_turn_on and has_scene }}"
                 sequence:
                   - service: scene.turn_on
-                    target: !input entities
+                    target: entities
               - conditions: "{{ is_turn_on and not has_scene and has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target: !input entities
+                    target: entities
                     data:
-                      brightness_pct: !input brightness_pct
-                      transition: !input transition
+                      brightness_pct: brightness_pct
+                      transition: transition
               - conditions: "{{ is_turn_on and not has_scene and not has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target: !input entities
-              - conditions: "{{ !input action == 'turn_off' }}"
+                    target: entities
+              - conditions: "{{ is_turn_off }}"
                 sequence:
                   - service: light.turn_off
-                    target: !input entities
+                    target: entities
     default: []
 mode: single
