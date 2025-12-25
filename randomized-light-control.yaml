@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v1.2
+  name: Randomized Offset Control v1.3
   description: >
-    v1.2 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time.
+    v1.3 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed template validation issues.
     
     • Sunrise/Sunset: true ± variation
     • Fixed time: set early trigger = base time minus max offset (e.g., want 18:30 ±30 → set 18:00)
@@ -108,39 +108,30 @@ action:
         sequence:
           - delay:
               seconds: "{{ range(0, (2 * !input max_offset_minutes * 60) + 1) | random }}"
-          # Scene turn_on
+          # Scene turn_on only
           - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ !input action == 'turn_on' and 'scene' in (!input entities.entity_id | map(attribute='domain') | list) }}"
+              - conditions: "{{ !input action == 'turn_on' and 'scene' in (!input entities.entity_id | map(attribute='domain') | list) }}"
                 sequence:
                   - service: scene.turn_on
                     target: !input entities
-          # Light/switch turn_on with optional params
+          # Light/switch turn_on – full with params if needed
           - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | list) }}"
+              - conditions: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | list) and ( !input brightness_pct > 0 or !input transition > 0 ) }}"
                 sequence:
-                  - if:
-                      - condition: or
-                        conditions:
-                          - "{{ !input brightness_pct > 0 }}"
-                          - "{{ !input transition > 0 }}"
-                    then:
-                      - service: light.turn_on
-                        target: !input entities
-                        data:
-                          brightness_pct: "{{ !input brightness_pct if !input brightness_pct > 0 else omit }}"
-                          transition: "{{ !input transition if !input transition > 0 else omit }}"
-                    else:
-                      - service: light.turn_on
-                        target: !input entities
-          # turn_off (lights & switches)
+                  - service: light.turn_on
+                    target: !input entities
+                    data:
+                      brightness_pct: !input brightness_pct
+                      transition: !input transition
+          # Light/switch turn_on – basic (no params)
           - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ !input action == 'turn_off' }}"
+              - conditions: "{{ !input action == 'turn_on' and 'scene' not in (!input entities.entity_id | map(attribute='domain') | list) and !input brightness_pct == 0 and !input transition == 0 }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input entities
+          # turn_off
+          - choose:
+              - conditions: "{{ !input action == 'turn_off' }}"
                 sequence:
                   - service: light.turn_off
                     target: !input entities
