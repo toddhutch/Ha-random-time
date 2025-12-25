@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v3.0
+  name: Randomized Offset Control v4.0
   description: >
-    v3.0 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Final working version.
+    v4.0 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. No validation errors.
     
     • Sunrise/Sunset: true ± variation (early offset in seconds + random delay)
     • Fixed time: set early trigger = base time minus max offset + random delay
@@ -76,58 +76,41 @@ trigger:
     id: fixed
 
 action:
-  - choose:
-      - conditions:
-          - condition: or
-            conditions:
-              - condition: and
-                conditions:
-                  - condition: trigger
-                    id: sunrise
-                  - condition: template
-                    value_template: "{{ !input trigger_type == 'sunrise' }}"
-              - condition: and
-                conditions:
-                  - condition: trigger
-                    id: sunset
-                  - condition: template
-                    value_template: "{{ !input trigger_type == 'sunset' }}"
-              - condition: and
-                conditions:
-                  - condition: trigger
-                    id: fixed
-                  - condition: template
-                    value_template: "{{ !input trigger_type == 'fixed' }}"
-        sequence:
-          - delay:
-              seconds: "{{ range(0, (2 * !input max_offset_minutes * 60) + 1) | random }}"
-          - variables:
-              entity_list: "{{ [entities.entity_id] if entities.entity_id is string else entities.entity_id }}"
-              has_scene: "{{ entity_list | select('match', '^scene\\.') | list | count > 0 }}"
-              has_params: "{{ !input brightness_pct > 0 or !input transition > 0 }}"
-          - choose:
-              - conditions: "{{ !input action == 'turn_on' and has_scene }}"
-                sequence:
-                  - service: scene.turn_on
-                    target:
-                      entity_id: "{{ entity_list }}"
-              - conditions: "{{ !input action == 'turn_on' and not has_scene and has_params }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ entity_list }}"
-                    data:
-                      brightness_pct: !input brightness_pct
-                      transition: !input transition
-              - conditions: "{{ !input action == 'turn_on' and not has_scene and not has_params }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ entity_list }}"
-              - conditions: "{{ !input action == 'turn_off' }}"
-                sequence:
-                  - service: light.turn_off
-                    target:
-                      entity_id: "{{ entity_list }}"
-    default: []
+  - delay:
+      seconds: "{{ range(0, (2 * !input max_offset_minutes * 60) + 1) | random }}"
+  - variables:
+      entity_list: "{{ entities.entity_id if entities.entity_id is iterable and entities.entity_id is not string else [entities.entity_id] }}"
+      has_scene: "{{ entity_list | select('match', '^scene\\.') | list | count > 0 }}"
+      has_params: "{{ !input brightness_pct > 0 or !input transition > 0 }}"
+  - if:
+      - condition: template
+        value_template: "{{ !input action == 'turn_on' and has_scene }}"
+    then:
+      - service: scene.turn_on
+        target:
+          entity_id: "{{ entity_list }}"
+  - if:
+      - condition: template
+        value_template: "{{ !input action == 'turn_on' and not has_scene and has_params }}"
+    then:
+      - service: light.turn_on
+        target:
+          entity_id: "{{ entity_list }}"
+        data:
+          brightness_pct: !input brightness_pct
+          transition: !input transition
+  - if:
+      - condition: template
+        value_template: "{{ !input action == 'turn_on' and not has_scene and not has_params }}"
+    then:
+      - service: light.turn_on
+        target:
+          entity_id: "{{ entity_list }}"
+  - if:
+      - condition: template
+        value_template: "{{ !input action == 'turn_off' }}"
+    then:
+      - service: light.turn_off
+        target:
+          entity_id: "{{ entity_list }}"
 mode: single
