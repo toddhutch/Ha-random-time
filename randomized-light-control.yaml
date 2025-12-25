@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v1.7
+  name: Randomized Offset Control v1.8
   description: >
-    v1.7 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed target validation.
+    v1.8 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed all validation issues.
     
     • Sunrise/Sunset: true ± variation
     • Fixed time: set early trigger = base time minus max offset (e.g., want 18:30 ±30 → set 18:00)
@@ -79,7 +79,8 @@ action:
   - variables:
       is_turn_on: "{{ action == 'turn_on' }}"
       is_turn_off: "{{ action == 'turn_off' }}"
-      has_scene: "{{ entities.entity_id | select('match', '^scene\\.') | list | count > 0 }}"
+      target_dict: "{{ {'entity_id': entities.entity_id if entities.entity_id is iterable and entities.entity_id is not string else [entities.entity_id]} }}"
+      has_scene: "{{ target_dict.entity_id | select('match', '^scene\\.') | list | count > 0 }}"
       has_params: "{{ brightness_pct > 0 or transition > 0 }}"
   - choose:
       - conditions:
@@ -110,14 +111,12 @@ action:
               - conditions: "{{ is_turn_on and has_scene }}"
                 sequence:
                   - service: scene.turn_on
-                    target:
-                      entity_id: !input entities
+                    target: "{{ target_dict }}"
           - choose:
               - conditions: "{{ is_turn_on and not has_scene and has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target:
-                      entity_id: !input entities
+                    target: "{{ target_dict }}"
                     data:
                       brightness_pct: brightness_pct
                       transition: transition
@@ -125,13 +124,11 @@ action:
               - conditions: "{{ is_turn_on and not has_scene and not has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target:
-                      entity_id: !input entities
+                    target: "{{ target_dict }}"
           - choose:
               - conditions: "{{ is_turn_off }}"
                 sequence:
                   - service: light.turn_off
-                    target:
-                      entity_id: !input entities
+                    target: "{{ target_dict }}"
     default: []
 mode: single
