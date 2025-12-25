@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v1.6
+  name: Randomized Offset Control v1.7
   description: >
-    v1.6 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed template syntax for validation.
+    v1.7 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed target validation.
     
     • Sunrise/Sunset: true ± variation
     • Fixed time: set early trigger = base time minus max offset (e.g., want 18:30 ±30 → set 18:00)
@@ -110,21 +110,28 @@ action:
               - conditions: "{{ is_turn_on and has_scene }}"
                 sequence:
                   - service: scene.turn_on
-                    target: entities
+                    target:
+                      entity_id: !input entities
+          - choose:
               - conditions: "{{ is_turn_on and not has_scene and has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target: entities
+                    target:
+                      entity_id: !input entities
                     data:
                       brightness_pct: brightness_pct
                       transition: transition
+          - choose:
               - conditions: "{{ is_turn_on and not has_scene and not has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target: entities
+                    target:
+                      entity_id: !input entities
+          - choose:
               - conditions: "{{ is_turn_off }}"
                 sequence:
                   - service: light.turn_off
-                    target: entities
+                    target:
+                      entity_id: !input entities
     default: []
 mode: single
