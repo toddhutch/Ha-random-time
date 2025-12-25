@@ -1,13 +1,13 @@
 blueprint:
-  name: Randomized Offset Control (Supports Scenes)
+  name: Randomized Offset Control (Supports Scenes - Fixed)
   description: >
     Activate lights/switches/scenes around sunrise, sunset, or fixed time with random ± offset.
     
-    - For turn_on: Lights/switches use turn_on (with optional brightness/transition); scenes use scene.turn_on.
-    - For turn_off: Only works on lights/switches (scenes have no off).
+    - Sunrise/Sunset: True ± variation (early trigger + random delay).
+    - Fixed time: Set early trigger to base minus max offset.
     
-    Sunrise/Sunset: True ± variation.
-    Fixed time: Set early trigger to base minus max offset.
+    turn_on: Scenes → scene.turn_on; Lights/switches → light.turn_on (with optional brightness/transition).
+    turn_off: Lights/switches only.
   domain: automation
   input:
     trigger_type:
@@ -67,11 +67,11 @@ blueprint:
 trigger:
   - platform: sun
     event: sunrise
-    offset: "{{ - ( !input max_offset_minutes | int(0) * 60 ) }}"
+    offset: "-{{ !input max_offset_minutes }}:00"
     id: sunrise
   - platform: sun
     event: sunset
-    offset: "{{ - ( !input max_offset_minutes | int(0) * 60 ) }}"
+    offset: "-{{ !input max_offset_minutes }}:00"
     id: sunset
   - platform: time
     at: !input fixed_trigger_time
@@ -80,8 +80,7 @@ trigger:
 action:
   - variables:
       max_offset: !input max_offset_minutes
-      has_scene: "{{ 'scene' in ( !input entities.entity_id | list | map(attribute='domain') | unique | list ) }}"
-      has_light_or_switch: "{{ ('light' in ( !input entities.entity_id | list | map(attribute='domain') | unique | list )) or ('switch' in ( !input entities.entity_id | list | map(attribute='domain') | unique | list )) }}"
+      has_scene: "{{ 'scene' in (entities.entity_id | map(attribute='domain') | unique | list) }}"
   - choose:
       - conditions:
           - condition: or
@@ -112,20 +111,22 @@ action:
                 sequence:
                   - service: scene.turn_on
                     target: !input entities
-              - conditions: "{{ !input action == 'turn_on' and has_light_or_switch }}"
+              - conditions: "{{ !input action == 'turn_on' and not has_scene }}"
                 sequence:
-                  - service: light.turn_on
-                    target: !input entities
-                    data:
-                      {% if !input brightness_pct | int(0) > 0 %}
-                      brightness_pct: {{ !input brightness_pct }}
-                      {% endif %}
-                      {% if !input transition | int(0) > 0 %}
-                      transition: {{ !input transition }}
-                      {% endif %}
-              - conditions: "{{ !input action == 'turn_off' and has_light_or_switch }}"
+                  - choose:
+                      - conditions: "{{ !input brightness_pct > 0 or !input transition > 0 }}"
+                        sequence:
+                          - service: light.turn_on
+                            target: !input entities
+                            data:
+                              brightness_pct: "{{ !input brightness_pct if !input brightness_pct > 0 else none }}"
+                              transition: "{{ !input transition if !input transition > 0 else none }}"
+                      default:
+                        - service: light.turn_on
+                          target: !input entities
+              - conditions: "{{ !input action == 'turn_off' }}"
                 sequence:
-                  - service: light.turn_off  # Works for switches too in recent HA
+                  - service: light.turn_off
                     target: !input entities
     default: []
 
