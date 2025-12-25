@@ -1,7 +1,7 @@
 blueprint:
-  name: Randomized Offset Control v1.8
+  name: Randomized Offset Control v1.9
   description: >
-    v1.8 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed all validation issues.
+    v1.9 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Fixed single entity target.
     
     • Sunrise/Sunset: true ± variation
     • Fixed time: set early trigger = base time minus max offset (e.g., want 18:30 ±30 → set 18:00)
@@ -79,8 +79,8 @@ action:
   - variables:
       is_turn_on: "{{ action == 'turn_on' }}"
       is_turn_off: "{{ action == 'turn_off' }}"
-      target_dict: "{{ {'entity_id': entities.entity_id if entities.entity_id is iterable and entities.entity_id is not string else [entities.entity_id]} }}"
-      has_scene: "{{ target_dict.entity_id | select('match', '^scene\\.') | list | count > 0 }}"
+      entity_list: "{{ [entities.entity_id] if entities.entity_id is string else entities.entity_id if entities.entity_id is iterable else [] }}"
+      has_scene: "{{ entity_list | select('match', '^scene\\.') | list | count > 0 }}"
       has_params: "{{ brightness_pct > 0 or transition > 0 }}"
   - choose:
       - conditions:
@@ -111,12 +111,14 @@ action:
               - conditions: "{{ is_turn_on and has_scene }}"
                 sequence:
                   - service: scene.turn_on
-                    target: "{{ target_dict }}"
+                    target:
+                      entity_id: "{{ entity_list }}"
           - choose:
               - conditions: "{{ is_turn_on and not has_scene and has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target: "{{ target_dict }}"
+                    target:
+                      entity_id: "{{ entity_list }}"
                     data:
                       brightness_pct: brightness_pct
                       transition: transition
@@ -124,11 +126,13 @@ action:
               - conditions: "{{ is_turn_on and not has_scene and not has_params }}"
                 sequence:
                   - service: light.turn_on
-                    target: "{{ target_dict }}"
+                    target:
+                      entity_id: "{{ entity_list }}"
           - choose:
               - conditions: "{{ is_turn_off }}"
                 sequence:
                   - service: light.turn_off
-                    target: "{{ target_dict }}"
+                    target:
+                      entity_id: "{{ entity_list }}"
     default: []
 mode: single
