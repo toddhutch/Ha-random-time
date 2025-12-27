@@ -1,10 +1,11 @@
 blueprint:
-  name: Randomized Offset Control v8.1 (Fixed)
+  name: Randomized Offset Control v8.2 (Fixed - No Offset Templates)
   description: >
     Supports scenes (turn_on only), lights, and switches. Random ± offset around sunrise/sunset or fixed time.
     • Symmetric random distribution centered on the target time
     • Separate inputs for scenes and devices to avoid service conflicts
     • Optional brightness and transition for lights
+    • Works without templated sun offsets (HA limitation)
   domain: automation
   homeassistant:
     min_version: 2025.1.0
@@ -75,11 +76,11 @@ blueprint:
 trigger:
   - platform: sun
     event: sunrise
-    offset: "{{ '!input max_offset_minutes' | int * -60 }}"
+    offset: 0
     id: sunrise
   - platform: sun
     event: sunset
-    offset: "{{ '!input max_offset_minutes' | int * -60 }}"
+    offset: 0
     id: sunset
   - platform: time
     at: !input fixed_trigger_time
@@ -95,7 +96,6 @@ action:
   - choose:
       - conditions: "{{ '!input action' == 'turn_on' }}"
         sequence:
-          # Activate scenes if any are selected
           - if:
               - condition: template
                 value_template: "{{ '!input scene_targets'.entity_id | default([]) | length > 0 }}"
@@ -103,7 +103,6 @@ action:
               - service: scene.turn_on
                 data:
                   entity_id: "{{ '!input scene_targets'.entity_id }}"
-          # Turn on lights/switches if any are selected
           - if:
               - condition: template
                 value_template: "{{ '!input device_targets'.entity_id | default([]) | length > 0 }}"
