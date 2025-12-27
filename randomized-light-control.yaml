@@ -1,13 +1,13 @@
 blueprint:
-  name: Randomized Offset Control v7.0
+  name: Randomized Offset Control v8.1 (Fixed)
   description: >
-    v7.0 (Dec 2025) – Supports scenes, lights, switches. Random ± offset around sunrise/sunset/fixed time. Final – no validation errors.
-    
-    • Sunrise/Sunset: true ± variation (early offset + random delay via loop)
-    • Fixed time: early trigger + random delay via loop
-    • turn_on: scenes → scene.turn_on | lights/switches → light.turn_on (optional brightness/transition)
-    • turn_off: lights/switches only
+    Supports scenes (turn_on only), lights, and switches. Random ± offset around sunrise/sunset or fixed time.
+    • Symmetric random distribution centered on the target time
+    • Separate inputs for scenes and devices to avoid service conflicts
+    • Optional brightness and transition for lights
   domain: automation
+  homeassistant:
+    min_version: 2025.1.0
   input:
     trigger_type:
       name: Trigger Type
@@ -27,7 +27,8 @@ blueprint:
           max: 240
           unit_of_measurement: minutes
     fixed_trigger_time:
-      name: Early Trigger Time (only for Fixed)
+      name: Fixed Trigger Time (only used when Trigger Type = fixed)
+      description: Time of day for the fixed trigger
       selector:
         time:
     action:
@@ -38,93 +39,88 @@ blueprint:
           options:
             - turn_on
             - turn_off
-    entities:
-      name: Entities / Scenes to Control
+    scene_targets:
+      name: Scenes to Activate (turn_on only)
+      description: Select one or more scene entities
+      default: {}
       selector:
         target:
           entity:
-            domain:
-              - light
-              - switch
-              - scene
+            domain: scene
+    device_targets:
+      name: Lights / Switches to Control
+      description: Lights and switches (brightness/transition apply to lights only)
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: [light, switch]
     brightness_pct:
-      name: Brightness % (lights only, turn_on)
+      name: Brightness % (lights only, for turn_on)
       default: 0
       selector:
         number:
           min: 0
           max: 100
+          unit_of_measurement: "%"
     transition:
-      name: Transition seconds (lights only, turn_on)
+      name: Transition seconds (lights only, for turn_on)
       default: 0
       selector:
         number:
           min: 0
           max: 60
+          unit_of_measurement: seconds
 
 trigger:
   - platform: sun
     event: sunrise
-    offset: "{{ max_offset_minutes * -60 }}"
+    offset: "{{ '!input max_offset_minutes' | int * -60 }}"
     id: sunrise
   - platform: sun
     event: sunset
-    offset: "{{ max_offset_minutes * -60 }}"
+    offset: "{{ '!input max_offset_minutes' | int * -60 }}"
     id: sunset
   - platform: time
     at: !input fixed_trigger_time
     id: fixed
 
-action:
-  - variables:
-      current_trigger: "{{ trigger.id }}"
-      selected_trigger: "{{ !input trigger_type }}"
-      is_selected_trigger: "{{ current_trigger == selected_trigger }}"
-      random_full_minutes: "{{ range(0, !input max_offset_minutes + 1) | random }}"
-      random_extra_seconds: "{{ range(0, 60) | random }}"
-      entity_list: "{{ [entities.entity_id] if entities.entity_id is string else entities.entity_id }}"
-      has_scene: "{{ entity_list | select('match', '^scene\\.') | list | count > 0 }}"
-      has_params: "{{ !input brightness_pct > 0 or !input transition > 0 }}"
-      is_turn_on: "{{ !input action == 'turn_on' }}"
-      is_turn_off: "{{ !input action == 'turn_off' }}"
+condition:
   - condition: template
-    value_template: "{{ is_selected_trigger }}"
-  - repeat:
-      count: "{{ random_full_minutes }}"
-      sequence:
-        - delay:
-            minutes: 1
+    value_template: "{{ trigger.id == '!input trigger_type' }}"
+
+action:
   - delay:
-      seconds: "{{ random_extra_seconds }}"
-  - if:
-      - condition: template
-        value_template: "{{ is_turn_on and has_scene }}"
-    then:
-      - service: scene.turn_on
-        target:
-          entity_id: "{{ entity_list }}"
-  - if:
-      - condition: template
-        value_template: "{{ is_turn_on and not has_scene and has_params }}"
-    then:
-      - service: light.turn_on
-        target:
-          entity_id: "{{ entity_list }}"
-        data:
-          brightness_pct: !input brightness_pct
-          transition: !input transition
-  - if:
-      - condition: template
-        value_template: "{{ is_turn_on and not has_scene and not has_params }}"
-    then:
-      - service: light.turn_on
-        target:
-          entity_id: "{{ entity_list }}"
-  - if:
-      - condition: template
-        value_template: "{{ is_turn_off }}"
-    then:
-      - service: light.turn_off
-        target:
-          entity_id: "{{ entity_list }}"
-mode: single
+      seconds: "{{ range(0, ('!input max_offset_minutes' | int * 120) + 1) | random }}"
+  - choose:
+      - conditions: "{{ '!input action' == 'turn_on' }}"
+        sequence:
+          # Activate scenes if any are selected
+          - if:
+              - condition: template
+                value_template: "{{ '!input scene_targets'.entity_id | default([]) | length > 0 }}"
+            then:
+              - service: scene.turn_on
+                data:
+                  entity_id: "{{ '!input scene_targets'.entity_id }}"
+          # Turn on lights/switches if any are selected
+          - if:
+              - condition: template
+                value_template: "{{ '!input device_targets'.entity_id | default([]) | length > 0 }}"
+            then:
+              - service: light.turn_on
+                target: !input device_targets
+                data: >
+                  {% set bp = '!input brightness_pct' | int %}
+                  {% set tr = '!input transition' | int %}
+                  {% set parts = [] %}
+                  {% if bp > 0 %}{% do parts.append('brightness_pct: ' ~ bp) %}{% endif %}
+                  {% if tr > 0 %}{% do parts.append('transition: ' ~ tr) %}{% endif %}
+                  {{ '{' ~ parts | join(', ') ~ '}' if parts else '{}' }}
+      - conditions: "{{ '!input action' == 'turn_off' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input device_targets
+
+mode: restart
+max_exceeded: silent
