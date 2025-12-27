@@ -1,5 +1,5 @@
 blueprint:
-  name: Randomized Offset Control v8.2 (Fixed - No Offset Templates)
+  name: Randomized Offset Control v8.3 (Fixed - With Defaults)
   description: >
     Supports scenes (turn_on only), lights, and switches. Random ± offset around sunrise/sunset or fixed time.
     • Symmetric random distribution centered on the target time
@@ -92,7 +92,7 @@ condition:
 
 action:
   - delay:
-      seconds: "{{ range(0, ('!input max_offset_minutes' | int * 120) + 1) | random }}"
+      seconds: "{{ range(0, ('!input max_offset_minutes' | int(default=0) * 120) + 1) | random }}"
   - choose:
       - conditions: "{{ '!input action' == 'turn_on' }}"
         sequence:
@@ -110,8 +110,8 @@ action:
               - service: light.turn_on
                 target: !input device_targets
                 data: >
-                  {% set bp = '!input brightness_pct' | int %}
-                  {% set tr = '!input transition' | int %}
+                  {% set bp = '!input brightness_pct' | int(default=0) %}
+                  {% set tr = '!input transition' | int(default=0) %}
                   {% set parts = [] %}
                   {% if bp > 0 %}{% do parts.append('brightness_pct: ' ~ bp) %}{% endif %}
                   {% if tr > 0 %}{% do parts.append('transition: ' ~ tr) %}{% endif %}
